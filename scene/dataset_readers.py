@@ -31,6 +31,23 @@ import math
 import copy
 
 
+# opencv/colmap
+OPENCV2WAYMO = np.array([
+    [0,  0,  1, 0],
+    [0,  -1, 0, 0],
+    [-1, 0,  0, 0],
+    [0,  0,  0, 1]
+])
+
+# opengl/nerf
+OPENGL2WAYMO = np.array([
+    [0,  0,  -1, 0],
+    [-1, 0,  0,  0],
+    [0,  1,  0,  0],
+    [0,  0,  0,  1]
+])
+
+
 class CameraInfo(NamedTuple):
     uid: int
     R: np.array
@@ -397,6 +414,72 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png", no_bg=
     scene_info = SceneInfo(point_cloud=pcd,
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
+                           nerf_normalization=nerf_normalization,
+                           ply_path=ply_path)
+    return scene_info
+
+
+
+def readWaymoCameras(path, start_time, end_time, cameras):
+    cam_infos = []
+    ego_dir = os.path.join(path, "ego_pose")
+    extrinsic_dir = os.path.join(path, "extrinsics")
+    intrinsic_dir = os.path.join(path, "intrinsics")
+    image_dir = os.path.join(path, "image")
+    extrinsics = [] # camera to ego
+    intrinsics = []
+    for cam in cameras:
+        extrinsics.append(np.loadtxt(os.path.join(extrinsic_dir, f"{cam}.txt")))
+        intrinsics.append(np.loadtxt(os.path.join(intrinsic_dir, f"{cam}.txt")))
+    for t in range(start_time, end_time+1):
+        for idx, cam in enumerate(cameras):
+            ego = np.loadtxt(os.path.join(ego_dir, f"{t:03d}.txt"))
+            intrinsic = intrinsic[idx]
+            extrinsic = extrinsic[idx]
+            image_file = os.path.join(image_dir, f"{t:03d}_{cam}.png")
+            img = Image.open(image_file)
+            width = img.shape[1]
+            height = img.shape[0]
+            frame_time = (t - start_time) / (end_time - start_time)
+            fx, fy, cx, cy = intrinsic[0], intrinsic[1], intrinsic[2], intrinsic[3]
+            fovx = 2 * math.atan(cx / fx)
+            fovy = 2 * math.atan(cy / fy)
+            c2w = ego @ extrinsic @ OPENCV2WAYMO
+            R = c2w[:3, :3]
+            T = c2w[:3, 3]
+            cam_info = CameraInfo(uid=((t-start_time)*len(cameras)+idx), R=R, T=T, FovY=fovy, FovX=fovx, image=img,
+                                  image_path = image_file, image_name=f"{t:03d}_{cam}",width=width, height=height, fid=frame_time)
+            
+            cam_infos.append(cam_info)
+    return cam_infos
+            
+
+
+def readWaymoSceneInfo(path, start_time, end_time, cameras):
+    """
+    Params:
+        path: including scene id
+    Returns:
+
+    """
+    print("Reading Waymo data")
+    train_cam_infos = readWaymoCameras(path, start_time, end_time, cameras)
+    test_cam_infos = []
+    nerf_normalization = getNerfppNorm(train_cam_infos)
+
+    # randomly initialize point cloud for the scene
+    num_pts = 100_000
+    print(f"Generating random point cloud ({num_pts})...")
+    xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
+    shs = np.random.random((num_pts, 3)) / 255.0
+    pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts,3)))
+    ply_path = os.path.join(path,'points3d.ply')
+
+    storePly(ply_path, xyz, SH2RGB(shs)*255)
+    pcd = fetchPly(ply_path)
+    scene_info = SceneInfo(point_cloud=pcd,
+                           train_cam_infos=train_cam_infos,
+                           test_cam_infos=test_cam_infos,
                            nerf_normalization=nerf_normalization,
                            ply_path=ply_path)
     return scene_info
