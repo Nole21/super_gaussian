@@ -476,7 +476,7 @@ def readWaymoSceneInfo(path, start_time, end_time, cameras, from_lidar=True):
     print("Reading Waymo data")
     if end_time == -1:
         end_time = len(os.listdir(os.path.join(path, "ego"))) - 1
-    lidar, train_cam_infos = readWaymoCameras(path, start_time, end_time, cameras)
+    train_cam_infos, lidar = readWaymoCameras(path, start_time, end_time, cameras)
     test_cam_infos = []
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
