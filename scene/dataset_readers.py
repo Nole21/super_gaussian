@@ -435,8 +435,8 @@ def readWaymoCameras(path, start_time, end_time, cameras):
         extrinsics.append(np.loadtxt(os.path.join(extrinsic_dir, f"{cam}.txt")))
         intrinsics.append(np.loadtxt(os.path.join(intrinsic_dir, f"{cam}.txt")))
     for t in range(start_time, end_time+1):
+        ego = np.loadtxt(os.path.join(ego_dir, f"{t:03d}.txt"))
         for idx, cam in enumerate(cameras):
-            ego = np.loadtxt(os.path.join(ego_dir, f"{t:03d}.txt"))
             intrinsic = intrinsic[idx]
             extrinsic = extrinsic[idx]
             image_file = os.path.join(image_dir, f"{t:03d}_{cam}.png")
@@ -455,12 +455,12 @@ def readWaymoCameras(path, start_time, end_time, cameras):
             
             cam_infos.append(cam_info)
 
-            # loda lidar data
-            lidar_file = os.path.join(lidar_dir, f"{t:03d}.bin")
-            lidar_info = np.memmap(lidar_file, dtype=np.float32, mode="r")
-            top_lidar = lidar_info[lidar_info[:, 13]==0][:, 3:6] # sample lidar point from top lidar scanner
-            top_lidar = ( ego[:3,:3] @ top_lidar.T + ego[:3,3:4]).T # convert lidar point to world coordinate
-            lidar.append(top_lidar)
+        # load lidar data
+        lidar_file = os.path.join(lidar_dir, f"{t:03d}.bin")
+        lidar_info = np.memmap(lidar_file, dtype=np.float32, mode="r")
+        top_lidar = lidar_info[lidar_info[:, 13]==0][:, 3:6] # sample lidar point from top lidar scanner
+        top_lidar = ( ego[:3,:3] @ top_lidar.T + ego[:3,3:4]).T # convert lidar point to world coordinate
+        lidar.append(top_lidar)
     lidar = np.concatenate(lidar, axis=0)
     return cam_infos, lidar
             
