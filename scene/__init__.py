@@ -61,6 +61,9 @@ class Scene:
         elif os.path.exists(os.path.join(args.source_path, "train_meta.json")):
             print("Found train_meta.json, assuming CMU data set!")
             scene_info = sceneLoadTypeCallbacks["CMU"](args.source_path)
+        elif os.path.exists(os.path.join(args.source_path, "ego")):
+            print("Found ego dir, assuming waymo data set!")
+            scene_info = sceneLoadTypeCallbacks['Waymo'](args.source_path, start_time=0, end_time=-1, cameras=[0,1,2], from_lidar=True)
         else:
             assert False, "Could not recognize scene type!"
 

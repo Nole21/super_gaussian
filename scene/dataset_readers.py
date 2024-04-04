@@ -469,11 +469,13 @@ def readWaymoCameras(path, start_time, end_time, cameras):
 def readWaymoSceneInfo(path, start_time, end_time, cameras, from_lidar=True):
     """
     Params:
-        path: including scene id
+        path: including scene id, specific scene data from waymo
     Returns:
 
     """
     print("Reading Waymo data")
+    if end_time == -1:
+        end_time = len(os.listdir(os.path.join(path, "ego"))) - 1
     lidar, train_cam_infos = readWaymoCameras(path, start_time, end_time, cameras)
     test_cam_infos = []
     nerf_normalization = getNerfppNorm(train_cam_infos)
@@ -1066,4 +1068,5 @@ sceneLoadTypeCallbacks = {
     "plenopticVideo": readPlenopticVideoDataset,
     # Neural 3D dataset in [https://github.com/facebookresearch/Neural_3D_Video]
     "CMU": readCMUSceneInfo,
+    "Waymo": readWaymoSceneInfo,
 }
