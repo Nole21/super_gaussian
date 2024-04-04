@@ -467,16 +467,20 @@ def readWaymoSceneInfo(path, start_time, end_time, cameras):
     test_cam_infos = []
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
-    # randomly initialize point cloud for the scene
-    num_pts = 100_000
-    print(f"Generating random point cloud ({num_pts})...")
-    xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
-    shs = np.random.random((num_pts, 3)) / 255.0
-    pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts,3)))
+
     ply_path = os.path.join(path,'points3d.ply')
 
-    storePly(ply_path, xyz, SH2RGB(shs)*255)
-    pcd = fetchPly(ply_path)
+    if not os.path.exists(ply_path):
+        # randomly initialize point cloud for the scene
+        num_pts = 100_000
+        print(f"Generating random point cloud ({num_pts})...")
+        xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
+        shs = np.random.random((num_pts, 3)) / 255.0
+        storePly(ply_path, xyz, SH2RGB(shs)*255)
+        pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts,3)))
+    else:
+        pcd = fetchPly(ply_path)
+        
     scene_info = SceneInfo(point_cloud=pcd,
                            train_cam_infos=train_cam_infos,
                            test_cam_infos=test_cam_infos,
