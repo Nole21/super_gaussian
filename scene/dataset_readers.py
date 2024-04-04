@@ -29,6 +29,7 @@ from scene.gaussian_model import BasicPointCloud
 from utils.camera_utils import camera_nerfies_from_JSON
 import math
 import copy
+from open3d import *
 
 
 # opencv/colmap
@@ -426,8 +427,10 @@ def readWaymoCameras(path, start_time, end_time, cameras):
     extrinsic_dir = os.path.join(path, "extrinsics")
     intrinsic_dir = os.path.join(path, "intrinsics")
     image_dir = os.path.join(path, "image")
+    lidar_dir = os.path.join(path, "lidar")
     extrinsics = [] # camera to ego
     intrinsics = []
+    lidar = []
     for cam in cameras:
         extrinsics.append(np.loadtxt(os.path.join(extrinsic_dir, f"{cam}.txt")))
         intrinsics.append(np.loadtxt(os.path.join(intrinsic_dir, f"{cam}.txt")))
@@ -451,11 +454,19 @@ def readWaymoCameras(path, start_time, end_time, cameras):
                                   image_path = image_file, image_name=f"{t:03d}_{cam}",width=width, height=height, fid=frame_time)
             
             cam_infos.append(cam_info)
-    return cam_infos
+
+            # loda lidar data
+            lidar_file = os.path.join(lidar_dir, f"{t:03d}.bin")
+            lidar_info = np.memmap(lidar_file, dtype=np.float32, mode="r")
+            top_lidar = lidar_info[lidar_info[:, 13]==0][:, 3:6] # sample lidar point from top lidar scanner
+            top_lidar = ( ego[:3,:3] @ top_lidar.T + ego[:3,3:4]).T # convert lidar point to world coordinate
+            lidar.append(top_lidar)
+    lidar = np.concatenate(lidar, axis=0)
+    return cam_infos, lidar
             
 
 
-def readWaymoSceneInfo(path, start_time, end_time, cameras):
+def readWaymoSceneInfo(path, start_time, end_time, cameras, from_lidar=True):
     """
     Params:
         path: including scene id
@@ -463,7 +474,7 @@ def readWaymoSceneInfo(path, start_time, end_time, cameras):
 
     """
     print("Reading Waymo data")
-    train_cam_infos = readWaymoCameras(path, start_time, end_time, cameras)
+    lidar, train_cam_infos = readWaymoCameras(path, start_time, end_time, cameras)
     test_cam_infos = []
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
@@ -472,15 +483,26 @@ def readWaymoSceneInfo(path, start_time, end_time, cameras):
 
     if not os.path.exists(ply_path):
         # randomly initialize point cloud for the scene
-        num_pts = 100_000
-        print(f"Generating random point cloud ({num_pts})...")
-        xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
-        shs = np.random.random((num_pts, 3)) / 255.0
-        storePly(ply_path, xyz, SH2RGB(shs)*255)
-        pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts,3)))
+        if not from_lidar:
+            num_pts = 100_000
+            print(f"Generating random point cloud ({num_pts})...")
+            xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
+            shs = np.random.random((num_pts, 3)) / 255.0
+            storePly(ply_path, xyz, SH2RGB(shs)*255)
+            pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts,3)))
+        else:
+            point_cloud = open3d.geometry.PointCloud()
+            point_cloud.points = open3d.utility.Vector3dVector(lidar)
+            downsampled_lidar = point_cloud.voxel_down_sample(voxel_size=0.15)
+            downsampled_lidar = np.asarray(downsampled_lidar.points)
+            num_pts = downsampled_lidar.shape[0]
+            shs = np.random.random((num_pts, 3)) / 255.0
+            storePly(ply_path, downsampled_lidar, SH2RGB(shs)*255)
+            pcd = BasicPointCloud(points=downsampled_lidar, colors=SH2RGB(shs), normals=np.zeros((num_pts,3)))
+
     else:
         pcd = fetchPly(ply_path)
-        
+
     scene_info = SceneInfo(point_cloud=pcd,
                            train_cam_infos=train_cam_infos,
                            test_cam_infos=test_cam_infos,
